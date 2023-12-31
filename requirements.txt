@@ -1,0 +1,5 @@
+openvino
+numpy
+opencv-python
+gradio
+anomalib

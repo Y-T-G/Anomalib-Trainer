@@ -1,0 +1,34 @@
+# TEMPLATE CONFIG. DO NOT CHANGE.
+
+name: <name-of-the-dataset>
+format: folder
+path: <path/to/folder/dataset>
+normal_dir: normal # name of the folder containing normal images.
+abnormal_dir: null # name of the folder containing abnormal images.
+normal_test_dir: null # name of the folder containing normal test images.
+task: segmentation # classification or segmentation
+mask_dir: null
+extensions: null
+split_ratio: 0.2 # ratio of the normal images that will be used to create a test split
+image_size: [256,256]
+train_batch_size: 32
+eval_batch_size: 32
+test_batch_size: 32
+num_workers: 8
+normalization: imagenet # data distribution to which the images will be normalized: [none, imagenet]
+test_split_mode: none # options: [from_dir, synthetic]
+test_split_ratio: 0.0
+val_split_mode: same_as_test # options: [same_as_test, from_test, sythetic]
+val_split_ratio: 0.5 # fraction of train/test images held out for validation (usage depends on val_split_mode)
+transform_config:
+  train: null
+  val: null
+  eval: null
+create_validation_set: true
+tiling:
+  apply: false
+  tile_size: null
+  stride: null
+  remove_border_count: 0
+  use_random_tiling: False
+  random_tile_count: 16

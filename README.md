@@ -2,7 +2,7 @@
 
 A simple Gradio interface for training [Anomalib](https://github.com/openvinotoolkit/anomalib) models.
 
-<!-- ![Demo](assets/demo.png) -->
+![Demo](assets/demo.png)
 
 ## Usage
 

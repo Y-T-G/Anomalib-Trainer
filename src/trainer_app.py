@@ -25,9 +25,11 @@ class AnomalibApp:
     def __init__(self):
         self.trainer = None
         self.app = gr.Blocks(title="Anomalib Trainer")
-    
+        self.trained = False
+        self.inferencer = None
+
     def train_thread(self, trainer, model, datamodule, config):
-        with open('./.output.log', 'w') as f:
+        with open("./.output.log", "w") as f:
             with redirect_stdout(f):
                 self.logger.info("Training the model.")
                 trainer.fit(model=model, datamodule=datamodule)
@@ -36,16 +38,17 @@ class AnomalibApp:
                 load_model_callback = LoadModelCallback(
                     weights_path=trainer.checkpoint_callback.best_model_path
                 )
-                trainer.callbacks.insert(0, load_model_callback)  # pylint: disable=no-member
+                trainer.callbacks.insert(
+                    0, load_model_callback
+                )  # pylint: disable=no-member
 
                 if config.dataset.test_split_mode == TestSplitMode.NONE:
                     self.logger.info("No test set provided. Skipping test stage.")
                 else:
                     self.logger.info("Testing the model.")
                     trainer.test(model=model, datamodule=datamodule)
-        
-        self.trained_state.value = True
 
+        self.trained = True
 
     def train(self, image_folder, model, batch_size, val_ratio, epochs, cust_conf):
         logs = gr.Code(visible=True)
@@ -59,15 +62,20 @@ class AnomalibApp:
             config_path = (
                 Path(f"{anomalib.__file__}").parent / f"models/{model}/config.yaml"
             )
-            config = get_configurable_parameters(model_name=model, config_path=config_path)
+            config = get_configurable_parameters(
+                model_name=model, config_path=config_path
+            )
             config["dataset"] = yaml.safe_load(open("./config.yaml", "r"))
-            config["trainer"].update({"default_root_dir":"results/custom/run",
-                                    "max_epochs": int(epochs)})
-            config["project"].update({"path":"results/custom/run"})
+            config["trainer"].update(
+                {"default_root_dir": "results/custom/run", "max_epochs": int(epochs)}
+            )
+            config["project"].update({"path": "results/custom/run"})
             config["optimization"].update({"export_mode": "torch"})
 
             if config["model"].get("early_stopping", None):
-                del config["model"]["early_stopping"]
+                config["model"]["early_stopping"].update(
+                    {"metric": "train_loss", "mode": "min"}
+                )
 
             data_config = {
                 "format": "folder",
@@ -83,7 +91,9 @@ class AnomalibApp:
             if config.project.get("seed") is not None:
                 seed_everything(config.project.seed)
         else:
-            config = get_configurable_parameters(model_name=model, config_path=cust_conf)
+            config = get_configurable_parameters(
+                model_name=model, config_path=cust_conf
+            )
 
         datamodule = get_datamodule(config)
         model = get_model(config)
@@ -94,7 +104,9 @@ class AnomalibApp:
             **config.trainer, logger=experiment_logger, callbacks=callbacks
         )
 
-        trainer_thread = Thread(target=self.train_thread, args=(trainer, model, datamodule, config))
+        trainer_thread = Thread(
+            target=self.train_thread, args=(trainer, model, datamodule, config)
+        )
         trainer_thread.start()
 
         self.trainer = trainer
@@ -114,14 +126,20 @@ class AnomalibApp:
         """
         # Perform inference for the given image.
         if self.inferencer is None:
-            self.inference = TorchInferencer(path="results/custom/run/torch/model.pt")
+            self.inferencer = TorchInferencer(
+                path="results/custom/run/weights/torch/model.pt"
+            )
         predictions = self.inferencer.predict(image=image)
-        infer_preview = gr.Image(value=predictions.segmentations, label="Detected Anomaly", visible=True)
+        infer_preview = gr.Image(
+            value=predictions.segmentations, label="Detected Anomaly", visible=True
+        )
         return infer_preview
 
     def update_options(self, config_type):
         if config_type == "Basic":
-            model = gr.Dropdown(label="Model", choices=get_available_models(), visible=True)
+            model = gr.Dropdown(
+                label="Model", choices=get_available_models(), visible=True
+            )
             batch_size = gr.Text(value=1, label="Batch Size", visible=True)
             val_ratio = gr.Text(value=0.2, label="Validation Ratio", visible=True)
             epochs = gr.Text(value=5, label="Epochs", visible=True)
@@ -165,13 +183,19 @@ class AnomalibApp:
         ):
             train_btn = gr.Button(value="Train", interactive=True, visible=True)
         return train_btn
-    
+
     def enable_infer_btn(self):
-        infer_img = gr.File(label="Select image to infer.", interactive=True, visible=True)
-        infer_btn = gr.Button(value="Infer", interactive=True, visible=True)
+        if self.trained:
+            enable = True
+        else:
+            enable = False
+
+        infer_img = gr.File(
+            label="Select image to infer.", interactive=True, visible=enable
+        )
+        infer_btn = gr.Button(value="Infer", interactive=True, visible=enable)
 
         return (infer_img, infer_btn)
-
 
     def read_logs(self):
         with open(".output.log", "r") as f:
@@ -179,7 +203,7 @@ class AnomalibApp:
 
     def build(self):
         with self.app:
-            gr.Markdown("Anomalib Trainer")
+            gr.Markdown("# Anomalib Trainer")
             with gr.Row():
                 with gr.Column():
                     image_folder = gr.Text(label="Select training folder.")
@@ -193,8 +217,8 @@ class AnomalibApp:
                     cust_conf = gr.File(visible=False)
             with gr.Row():
                 with gr.Column():
-                    infer_img = gr.File(visible=False)
-                    infer_btn = gr.Button(value="Infer", visible=False)
+                    infer_img = gr.File(label="Select image to infer.", visible=True)
+                    infer_btn = gr.Button(value="Infer", visible=True)
                 with gr.Column():
                     infer_preview = gr.Image(label="Detected Anomaly", visible=False)
             with gr.Row():
@@ -219,8 +243,6 @@ class AnomalibApp:
 
             self.logger = logging.getLogger("AnomalibTrainer")
 
-            self.trained_state = gr.Text(value=False, visible=False)
-
             # Run training on folder
             train_btn.click(
                 self.train,
@@ -231,7 +253,7 @@ class AnomalibApp:
 
             # Update infer button
             gr.on(
-                [self.trained_state.change],
+                [logs.change],
                 self.enable_infer_btn,
                 inputs=[],
                 outputs=[infer_img, infer_btn],

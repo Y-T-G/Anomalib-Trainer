@@ -18,14 +18,13 @@ from threading import Thread
 
 from pytorch_lightning import Trainer, seed_everything
 
-from .logger import FileLogger
 import logging
 
 
 class AnomalibApp:
     def __init__(self):
         self.trainer = None
-        self.app = gr.Blocks()
+        self.app = gr.Blocks(title="Anomalib Trainer")
     
     def train_thread(self, trainer, model, datamodule, config):
         with open('./.output.log', 'w') as f:
@@ -66,6 +65,9 @@ class AnomalibApp:
                                     "max_epochs": int(epochs)})
             config["project"].update({"path":"results/custom/run"})
             config["optimization"].update({"export_mode": "torch"})
+
+            if config["model"].get("early_stopping", None):
+                del config["model"]["early_stopping"]
 
             data_config = {
                 "format": "folder",
@@ -119,7 +121,7 @@ class AnomalibApp:
 
     def update_options(self, config_type):
         if config_type == "Basic":
-            model = gr.Dropdown(label="Model", choices=get_available_models(), visible=False)
+            model = gr.Dropdown(label="Model", choices=get_available_models(), visible=True)
             batch_size = gr.Text(value=1, label="Batch Size", visible=True)
             val_ratio = gr.Text(value=0.2, label="Validation Ratio", visible=True)
             epochs = gr.Text(value=5, label="Epochs", visible=True)
@@ -127,6 +129,7 @@ class AnomalibApp:
                 label="Select custom config yaml.", interactive=False, visible=False
             )
         else:
+            model = gr.Dropdown(label="Model", visible=False)
             batch_size = gr.Text(label="Batch Size", visible=False)
             val_ratio = gr.Text(label="Validation Ratio", visible=False)
             epochs = gr.Text(label="Epochs", visible=False)
@@ -176,6 +179,7 @@ class AnomalibApp:
 
     def build(self):
         with self.app:
+            gr.Markdown("Anomalib Trainer")
             with gr.Row():
                 with gr.Column():
                     image_folder = gr.Text(label="Select training folder.")
@@ -213,12 +217,6 @@ class AnomalibApp:
                 outputs=[train_btn],
             )
 
-            # sys.stdout = self.logger = FileLogger(".output.log")
-            logging.basicConfig(filename='./.output.log',
-                                filemode='w',
-                                format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-                                datefmt='%H:%M:%S',
-                                level=logging.INFO)
             self.logger = logging.getLogger("AnomalibTrainer")
 
             self.trained_state = gr.Text(value=False, visible=False)

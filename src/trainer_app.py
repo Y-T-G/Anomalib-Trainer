@@ -28,9 +28,19 @@ class AnomalibApp:
         self.trained = False
         self.inferencer = None
 
-    def train_thread(self, trainer, model, datamodule, config):
+    def train_thread(self, model, config):
         with open("./.output.log", "w") as f:
             with redirect_stdout(f):
+
+                datamodule = get_datamodule(config)
+                model = get_model(config)
+                experiment_logger = get_experiment_logger(config)
+                callbacks = get_callbacks(config)
+
+                trainer = Trainer(
+                    **config.trainer, logger=experiment_logger, callbacks=callbacks
+                )
+
                 self.logger.info("Training the model.")
                 trainer.fit(model=model, datamodule=datamodule)
 
@@ -54,10 +64,6 @@ class AnomalibApp:
         logs = gr.Code(visible=True)
         train_btn = gr.Button(value="Train", interactive=False, visible=False)
 
-        if self.trainer is not None:
-            self.logger.info("Model already trained.")
-            return logs, trainer
-
         if not cust_conf:
             config_path = (
                 Path(f"{anomalib.__file__}").parent / f"models/{model}/config.yaml"
@@ -71,11 +77,6 @@ class AnomalibApp:
             )
             config["project"].update({"path": "results/custom/run"})
             config["optimization"].update({"export_mode": "torch"})
-
-            if config["model"].get("early_stopping", None):
-                config["model"]["early_stopping"].update(
-                    {"metric": "train_loss", "mode": "min"}
-                )
 
             data_config = {
                 "format": "folder",
@@ -95,21 +96,10 @@ class AnomalibApp:
                 model_name=model, config_path=cust_conf
             )
 
-        datamodule = get_datamodule(config)
-        model = get_model(config)
-        experiment_logger = get_experiment_logger(config)
-        callbacks = get_callbacks(config)
-
-        trainer = Trainer(
-            **config.trainer, logger=experiment_logger, callbacks=callbacks
-        )
-
         trainer_thread = Thread(
-            target=self.train_thread, args=(trainer, model, datamodule, config)
+            target=self.train_thread, args=(model, config)
         )
         trainer_thread.start()
-
-        self.trainer = trainer
 
         return logs, train_btn
 
@@ -198,7 +188,7 @@ class AnomalibApp:
         return (infer_img, infer_btn)
 
     def read_logs(self):
-        with open(".output.log", "r") as f:
+        with open("./.output.log", "r") as f:
             return f.read()
 
     def build(self):
@@ -209,7 +199,7 @@ class AnomalibApp:
                     image_folder = gr.Text(label="Select training folder.")
                     train_btn = gr.Button(value="Train", interactive=False)
                 with gr.Column():
-                    config_type = gr.Radio(choices=["Basic", "Custom"])
+                    config_type = gr.Radio(label="Mode", choices=["Basic", "Custom"])
                     model = gr.Dropdown(label="Model", visible=False)
                     batch_size = gr.Text(label="Batch Size", visible=False)
                     val_ratio = gr.Text(label="Validation Ratio", visible=False)
@@ -222,7 +212,7 @@ class AnomalibApp:
                 with gr.Column():
                     infer_preview = gr.Image(label="Detected Anomaly", visible=False)
             with gr.Row():
-                logs = gr.Code(visible=True, interactive=False)
+                logs = gr.Code(visible=False, interactive=False)
                 self.app.load(self.read_logs, None, logs, every=1)
 
             # Update config options
